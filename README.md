@@ -1,4 +1,4 @@
-# video_ql
+# VideoQL
 
 [![codecov](https://codecov.io/gh/AdityaNG/video_ql/branch/main/graph/badge.svg?token=video_ql_token_here)](https://codecov.io/gh/AdityaNG/video_ql)
 [![CI](https://github.com/AdityaNG/video_ql/actions/workflows/main.yml/badge.svg)](https://github.com/AdityaNG/video_ql/actions/workflows/main.yml)
