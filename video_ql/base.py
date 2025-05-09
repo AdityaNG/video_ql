@@ -94,9 +94,9 @@ class VideoQL:
 
         # Create a string representing the queries and config
         query_str = json.dumps(
-            [q.dict() for q in self.queries], sort_keys=True
+            [q.model_dump() for q in self.queries], sort_keys=True
         )
-        config_str = json.dumps(self.config.dict(), sort_keys=True)
+        config_str = json.dumps(self.config.model_dump(), sort_keys=True)
         context_str = self.context
 
         # Combine all components and hash
@@ -124,7 +124,7 @@ class VideoQL:
         if self.disable_cache:
             return
 
-        cache_data = {k: v.dict() for k, v in self.__cache.items()}
+        cache_data = {k: v.model_dump() for k, v in self.__cache.items()}
         with open(self.cache_path, "w") as f:
             json.dump(cache_data, f, indent=2)
 

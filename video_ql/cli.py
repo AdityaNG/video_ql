@@ -107,7 +107,7 @@ def main():  # pragma: no cover
         with open(os.path.join(args.output, "query_results.json"), "w") as f:
             json.dump(
                 {
-                    "query_config": query_config.dict(),
+                    "query_config": query_config.model_dump(),
                     "matching_frames": [
                         {
                             "index": idx,
