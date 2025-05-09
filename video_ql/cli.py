@@ -126,7 +126,7 @@ def main():  # pragma: no cover
             analysis = video_ql[idx]
 
             # Extract the frame
-            frames = video_ql._extract_frames(idx, 1)
+            frames = video_ql.extract_frames(idx, 1)
             if frames:
                 frame = frames[0]["frame"]
                 vis_frame = video_ql._visualize_results(frame, analysis)

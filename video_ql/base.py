@@ -33,8 +33,8 @@ class VideoQL:
         video_processor_config: Optional[VideoProcessorConfig] = None,
         cache_dir: str = "~/.cache/video_ql/",
         disable_cache: bool = False,
-        # model_name: str = "gpt-4o-mini",
-        model_name: str = "claude-3-haiku-20240307",
+        model_name: str = "gpt-4o-mini",
+        # model_name: str = "claude-3-haiku-20240307",
     ):
         """Initialize the VideoQL instance"""
         self.video_path = video_path
@@ -173,57 +173,6 @@ class VideoQL:
 
         return prompt
 
-    def _extract_frames(
-        self,
-        start_idx: int,
-        count: int,
-        stride: int = 1,
-    ) -> List[Dict[str, Any]]:
-        """Extract frames from video starting at index"""
-        cap = cv2.VideoCapture(self.video_path)
-
-        if not cap.isOpened():
-            raise ValueError(f"Could not open video file: {self.video_path}")
-
-        video_fps = cap.get(cv2.CAP_PROP_FPS)
-        frames = []  # type: ignore
-
-        # Set position to start_idx
-        cap.set(cv2.CAP_PROP_POS_FRAMES, start_idx)
-
-        for _ in range(count):
-            ret, frame = cap.read()
-
-            if not ret:
-                break
-
-            # Resize frame if needed
-            if frame is not None:
-                h, w = frame.shape[:2]
-                max_w, max_h = self.config.max_resolution
-
-                scale = 1.0
-                if w > max_w or h > max_h:
-                    scale_w = max_w / w
-                    scale_h = max_h / h
-                    scale = min(scale_w, scale_h)
-
-                if scale < 1.0:
-                    new_w, new_h = int(w * scale), int(h * scale)
-                    frame = cv2.resize(
-                        frame, (new_w, new_h), interpolation=cv2.INTER_AREA
-                    )
-
-            timestamp = (start_idx + len(frames)) / video_fps
-            frames.append({"frame": frame, "timestamp": timestamp})
-
-            # Stride jump
-            for _ in range(stride - 1):
-                ret, frame = cap.read()
-
-        cap.release()
-        return frames
-
     def _analyze_frame(self, frame: Dict[str, Any]) -> Label:
         """Analyze a single frame using the vision model"""
         image_base64 = encode_image(frame["frame"])
@@ -300,7 +249,7 @@ class VideoQL:
             total_frames_needed = (
                 self.config.tile_frames[0] * self.config.tile_frames[1]
             )
-            frames = self._extract_frames(
+            frames = self.extract_frames(
                 frame_idx, total_frames_needed, self.config.frame_stride
             )
 
@@ -362,7 +311,7 @@ class VideoQL:
 
                 # If we need to display or save, get the original frame
                 if display or save_frames:
-                    frames = self._extract_frames(i, 1)
+                    frames = self.extract_frames(i, 1)
                     if frames:
                         vis_frame = self._visualize_results(
                             frames[0]["frame"], analysis
@@ -410,11 +359,26 @@ class VideoQL:
             frames, self.config.tile_frames
         )
 
+    def extract_frames(
+        self,
+        start_idx: int,
+        count: int,
+        stride: int = 1,
+    ) -> List[Dict[str, Any]]:
+        frames = self.visualizer.extract_frames(
+            self.video_path,
+            start_idx,
+            count,
+            stride,
+            self.config.max_resolution,
+        )
+        return frames
+
     def create_tile_image(
         self, start_idx: int = 0, stride: int = 1
     ) -> np.ndarray:
         """Create a tiled image of frames starting from start_idx"""
-        frames = self._extract_frames(
+        frames = self.extract_frames(
             start_idx,
             self.config.tile_frames[0] * self.config.tile_frames[1],
             stride,
@@ -425,8 +389,6 @@ class VideoQL:
     def query_video(
         self,
         query_config: Union[str, Dict],
-        display: bool = False,
-        save_video: bool = False,
         output_path: str = "results/query_output.mp4",
     ) -> List[int]:
         """
@@ -465,102 +427,4 @@ class VideoQL:
                 for video_idx in range(video_idx_lb, video_idx_ub):
                     matching_frames.append(video_idx)
 
-        if display or save_video:
-            self.play_matching_segments(
-                matching_frames,
-                output_path=output_path if save_video else None,
-            )
-
         return matching_frames
-
-    def play_matching_segments(
-        self,
-        matching_frames: List[int],
-        display_time: float = 0.1,
-        output_path: Optional[str] = None,
-    ) -> None:
-        """Play video segments that match the query criteria.
-
-        Args:
-            matching_frames: List of frame indices that match the query
-            display_time: Time to display each frame in seconds
-            output_path: Path to save output video (optional)
-        """
-        if not matching_frames:
-            print("No matching frames found.")
-            return
-
-        cap = cv2.VideoCapture(self.video_path)
-        if not cap.isOpened():
-            raise ValueError(f"Could not open video file: {self.video_path}")
-
-        # Get video properties
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = cap.get(cv2.CAP_PROP_FPS)
-
-        # Setup output video writer if requested
-        writer = None
-        if output_path:
-            fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # type: ignore
-            writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-
-        # Group consecutive frames into segments
-        segments = []
-        current_segment = [matching_frames[0]]
-
-        for i in range(1, len(matching_frames)):
-            if (
-                matching_frames[i] - matching_frames[i - 1]
-                <= self.config.frame_stride * 2
-            ):
-                current_segment.append(matching_frames[i])
-            else:
-                segments.append(current_segment)
-                current_segment = [matching_frames[i]]
-
-        segments.append(current_segment)
-
-        print(f"Found {len(segments)} matching segments")
-
-        # Play each segment
-        for segment in segments:
-            start_idx = segment[0]
-            end_idx = segment[-1]
-
-            print(f"Playing segment from frame {start_idx} to {end_idx}")
-
-            for idx in range(start_idx, end_idx + 1, self.config.frame_stride):
-                # Get the analysis for this frame
-                analysis = self[idx]
-
-                # Get the actual frame from video
-                cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-                ret, frame = cap.read()
-
-                if not ret:
-                    break
-
-                # Visualize the results
-                vis_frame = self._visualize_results(frame, analysis)
-
-                # Display
-                cv2.imshow("Query Results", vis_frame)
-
-                # Write to output if requested
-                if writer:
-                    writer.write(vis_frame)
-
-                # Wait for key press
-                key = cv2.waitKey(int(display_time * 1000)) & 0xFF
-                if key == 27:  # ESC key
-                    break
-
-            if cv2.waitKey(1) & 0xFF == 27:  # ESC key
-                break
-
-        # Release resources
-        cap.release()
-        if writer:
-            writer.release()
-        cv2.destroyAllWindows()

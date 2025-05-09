@@ -1,5 +1,7 @@
 """Visualization module for video_ql."""
 
+from typing import Any, Dict, List, Tuple
+
 import cv2
 import numpy as np
 
@@ -115,3 +117,56 @@ class VideoVisualizer:
             tile_image[y_start:y_end, x_start:x_end] = frame_data["frame"]
 
         return tile_image
+
+    @staticmethod
+    def extract_frames(
+        video_path: str,
+        start_idx: int,
+        count: int,
+        stride: int,
+        max_resolution: Tuple[int, int],
+    ) -> List[Dict[str, Any]]:
+        """Extract frames from video starting at index"""
+        cap = cv2.VideoCapture(video_path)
+
+        if not cap.isOpened():
+            raise ValueError(f"Could not open video file: {video_path}")
+
+        video_fps = cap.get(cv2.CAP_PROP_FPS)
+        frames = []  # type: ignore
+
+        # Set position to start_idx
+        cap.set(cv2.CAP_PROP_POS_FRAMES, start_idx)
+
+        for _ in range(count):
+            ret, frame = cap.read()
+
+            if not ret:
+                break
+
+            # Resize frame if needed
+            if frame is not None:
+                h, w = frame.shape[:2]
+                max_w, max_h = max_resolution
+
+                scale = 1.0
+                if w > max_w or h > max_h:
+                    scale_w = max_w / w
+                    scale_h = max_h / h
+                    scale = min(scale_w, scale_h)
+
+                if scale < 1.0:
+                    new_w, new_h = int(w * scale), int(h * scale)
+                    frame = cv2.resize(
+                        frame, (new_w, new_h), interpolation=cv2.INTER_AREA
+                    )
+
+            timestamp = (start_idx + len(frames)) / video_fps
+            frames.append({"frame": frame, "timestamp": timestamp})
+
+            # Stride jump
+            for _ in range(stride - 1):
+                ret, frame = cap.read()
+
+        cap.release()
+        return frames
