@@ -50,6 +50,9 @@ jobs:
         run: make test
       - name: "Upload coverage to Codecov"
         uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: AdityaNG/video_ql
         # with:
         #   fail_ci_if_error: true
 
