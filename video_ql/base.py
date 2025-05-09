@@ -2,9 +2,7 @@
 video_ql base module.
 """
 
-import base64
 import hashlib
-import io
 import json
 import os
 from typing import Any, Dict, List, Optional, Union
@@ -16,11 +14,11 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_openai import ChatOpenAI
-from PIL import Image
 from pydantic import BaseModel, Field, create_model
 
 from .models import Label, Query, VideoProcessorConfig
-from .utils import get_length_of_video, get_video_fps, video_hash
+from .query import matches_query
+from .utils import encode_image, get_length_of_video, get_video_fps, video_hash
 
 NAME = "video_ql"
 
@@ -171,15 +169,6 @@ class VideoQL:
 
         return prompt
 
-    def _encode_image(self, image_array: np.ndarray) -> str:
-        """Encode image array to base64 string."""
-        image = Image.fromarray(cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB))
-        buffer = io.BytesIO()
-        image.save(buffer, format="JPEG")
-        buffer.seek(0)
-        image_bytes = buffer.getvalue()
-        return base64.b64encode(image_bytes).decode("utf-8")
-
     def _extract_frames(
         self,
         start_idx: int,
@@ -233,7 +222,7 @@ class VideoQL:
 
     def _analyze_frame(self, frame: Dict[str, Any]) -> Label:
         """Analyze a single frame using the vision model"""
-        image_base64 = self._encode_image(frame["frame"])
+        image_base64 = encode_image(frame["frame"])
 
         if self.model_name in ["gpt-4o-mini"]:
             model = ChatOpenAI(
@@ -555,7 +544,7 @@ class VideoQL:
             analysis = self.__cache[idx]
 
             # If the analysis matches any of the queries
-            if self._matches_query(
+            if matches_query(
                 analysis, query_config["queries"]  # type: ignore
             ):
 
@@ -664,58 +653,3 @@ class VideoQL:
         if writer:
             writer.release()
         cv2.destroyAllWindows()
-
-    def _matches_query(self, analysis: Label, queries: List[Dict]) -> bool:
-        """Check if an analysis matches a query or set of queries"""
-        for query in queries:
-            # Check if it's an AND query
-            if "AND" in query:
-                if all(
-                    self._matches_subquery(analysis, subquery)
-                    for subquery in query["AND"]
-                ):
-                    return True
-
-            # Check if it's an OR query
-            elif "OR" in query:
-                for subquery in query["OR"]:
-                    if isinstance(subquery, dict) and "AND" in subquery:
-                        # Handle nested AND within OR
-                        if all(
-                            self._matches_subquery(analysis, sub)
-                            for sub in subquery["AND"]
-                        ):
-                            return True
-                    else:
-                        # Simple subquery
-                        if self._matches_subquery(analysis, subquery):
-                            return True
-
-            # Simple query
-            elif self._matches_subquery(analysis, query):
-                return True
-
-        return False
-
-    def _matches_subquery(self, analysis: Label, subquery: Dict) -> bool:
-        """
-        Check if an analysis matches a single subquery with
-        improved handling.
-        """
-        # Get the query key (field name)
-        query_text = subquery["query"]
-        field_name = query_text.lower().replace("?", "").replace(" ", "_")
-
-        # Get the options to match
-        options = subquery.get("options", [])
-
-        # Check if the field exists in the analysis results
-        if field_name in analysis.results:
-            # If options are specified, check if the analysis value
-            # is in the options
-            if options:
-                return analysis.results[field_name] in options
-            # Otherwise, just check if the field has a truthy value
-            return bool(analysis.results[field_name])
-
-        return False

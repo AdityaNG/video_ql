@@ -2,9 +2,13 @@
 video_ql utils module.
 """
 
+import base64
 import hashlib
+import io
 
 import cv2
+import numpy as np
+from PIL import Image
 
 
 def video_hash(video_path: str) -> str:
@@ -44,3 +48,13 @@ def get_video_fps(video_path: str) -> float:
 
     cap.release()
     return fps
+
+
+def encode_image(image_array: np.ndarray) -> str:
+    """Encode image array to base64 string."""
+    image = Image.fromarray(cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB))
+    buffer = io.BytesIO()
+    image.save(buffer, format="JPEG")
+    buffer.seek(0)
+    image_bytes = buffer.getvalue()
+    return base64.b64encode(image_bytes).decode("utf-8")
