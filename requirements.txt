@@ -6,7 +6,3 @@ pydantic
 PyYAML
 pillow
 numpy
-fastapi
-python-multipart
-uvicorn
-matplotlib

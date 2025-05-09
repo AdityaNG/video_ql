@@ -146,7 +146,7 @@ class VideoVisualizer:
 
             # Resize frame if needed
             if frame is not None:
-                h, w = frame.shape[:2]
+                h, w = frame.shape[:2]  # type: ignore
                 max_w, max_h = max_resolution
 
                 scale = 1.0
