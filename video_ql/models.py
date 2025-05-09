@@ -1,0 +1,34 @@
+"""
+Data models for video_ql project.
+"""
+
+from typing import Any, Dict, List, Optional, Tuple
+
+from pydantic import BaseModel
+
+
+class Query(BaseModel):
+    """Represents a query for video analysis"""
+
+    query: str
+    options: Optional[List[str]] = None
+    short_question: Optional[str] = None
+    short_options: Optional[List[str]] = None
+
+
+class VideoProcessorConfig(BaseModel):
+    """Configuration for video processing"""
+
+    fps: float = 1.0
+    tile_frames: Tuple[int, int] = (3, 3)
+    frame_stride: int = 9
+    max_resolution: Tuple[int, int] = (640, 360)
+    context: str = "Answer the following"
+
+
+class Label(BaseModel):
+    """Represents a label/analysis result for a frame"""
+
+    timestamp: float
+    results: Dict[str, Any]
+    error: Optional[str] = None

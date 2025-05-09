@@ -1,28 +1,150 @@
-"""CLI interface for video_ql project.
+"""CLI interface for video_ql project."""
 
-Be creative! do whatever you want!
+import argparse
+import json
+import os
 
-- Install click or typer and create a CLI app
-- Use builtin argparse
-- Start a web application
-- Import things from your .base module
-"""
+import cv2
+import yaml
+
+from .base import VideoQL
+from .models import Query, VideoProcessorConfig
+
+
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Query video analysis results"
+    )
+    parser.add_argument(
+        "--video", type=str, required=True, help="Path to the video file"
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        required=True,
+        help="Path to the YAML config file",
+    )
+    parser.add_argument(
+        "--results",
+        type=str,
+        required=True,
+        help="Path to the results JSON file",
+    )
+    parser.add_argument(
+        "--query", type=str, required=True, help="Path to the query YAML file"
+    )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="results/query_results",
+        help="Path to output directory",
+    )
+    parser.add_argument(
+        "--display",
+        action="store_true",
+        help="Display frames that match the query",
+    )
+    return parser.parse_args()
+
+
+def load_config(config_path: str) -> dict:
+    """Load configuration from YAML file."""
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f)
+    return config
 
 
 def main():  # pragma: no cover
-    """
-    The main function executes on commands:
-    `python -m video_ql` and `$ video_ql `.
+    args = parse_args()
+    config = load_config(args.config)
 
-    This is your program's entry point.
+    video_processor_config = VideoProcessorConfig(**{
+        "fps": config.get("fps", 1.0),
+        "tile_frames": config.get("tile_frames", (3, 3)),
+        "frame_stride": config.get("frame_stride", 9),
+        "max_resolution": config.get("max_resolution", (640, 360)),
+    })
 
-    You can change this function to do whatever you want.
-    Examples:
-        * Run a test suite
-        * Run a server
-        * Do some other stuff
-        * Run a command line application (Click, Typer, ArgParse)
-        * List all available tasks
-        * Run an application (Flask, FastAPI, Django, etc.)
-    """
-    print("This will do something")
+    # Convert config queries to Query objects
+    queries = [
+        Query(
+            query=q["query"],
+            options=q.get("options"),
+            short_question=q.get("short_question", q["query"]),
+            short_options=q.get("short_options", q.get("options", [])),
+        )
+        for q in config["queries"]
+    ]
+
+    # Initialize VideoQL
+    video_ql = VideoQL(
+        video_path=args.video,
+        queries=queries,
+        context=config.get("context", "Answer the following"),
+        # The rest of the config options
+        video_processor_config=video_processor_config,
+    )
+
+    # Load the query
+    query_config = load_config(args.query)
+
+    # Find matching frames
+    matching_frames = video_ql.query_video(query_config)
+
+    # Create output directory if it doesn't exist
+    if not os.path.exists(args.output):
+        os.makedirs(args.output)
+
+    # Save and/or display matching frames
+    if matching_frames:
+        print(f"Found {len(matching_frames)} matching frames")
+
+        # Save information about matching frames
+        with open(os.path.join(args.output, "query_results.json"), "w") as f:
+            json.dump(
+                {
+                    "query_config": query_config,
+                    "matching_frames": [
+                        {
+                            "index": idx,
+                            "timestamp": video_ql[
+                                idx // config.get("frame_stride", 9)
+                            ].timestamp,
+                        }
+                        for idx in matching_frames
+                    ],
+                },
+                f,
+                indent=2,
+            )
+
+        # Display or save matching frames
+        for i, idx in enumerate(matching_frames):
+            cache_idx = idx // config.get("frame_stride", 9)
+            analysis = video_ql[cache_idx]
+
+            # Extract the frame
+            frames = video_ql._extract_frames(idx, 1)
+            if frames:
+                frame = frames[0]["frame"]
+                vis_frame = video_ql._visualize_results(frame, analysis)
+
+                # Save the frame
+                frame_path = os.path.join(
+                    args.output,
+                    f"match_{i:03d}_frame_{idx:04d}_{analysis.timestamp:.2f}s.jpg",
+                )
+                cv2.imwrite(frame_path, vis_frame)
+
+                # Display if requested
+                if args.display:
+                    cv2.imshow("Query Results", vis_frame)
+                    key = cv2.waitKey(1) & 0xFF
+                    if key == 27:  # ESC key
+                        break
+
+        if args.display:
+            cv2.destroyAllWindows()
+    else:
+        print("No frames matched the query")
