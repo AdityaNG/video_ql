@@ -1,27 +1,28 @@
-from typing import Dict, List
+from typing import List, Union
 
-from .models import Label
+from .models import AndCondition, Label, OrCondition, QueryCondition
 
 
-def matches_query(analysis: Label, queries: List[Dict]) -> bool:
+def matches_query(
+    analysis: Label,
+    queries: List[Union[QueryCondition, AndCondition, OrCondition]],
+) -> bool:
     """Check if an analysis matches a query or set of queries"""
     for query in queries:
         # Check if it's an AND query
-        if "AND" in query:
+        if isinstance(query, AndCondition):
             if all(
-                matches_subquery(analysis, subquery)
-                for subquery in query["AND"]
+                matches_subquery(analysis, subquery) for subquery in query.AND
             ):
                 return True
 
         # Check if it's an OR query
-        elif "OR" in query:
-            for subquery in query["OR"]:
-                if isinstance(subquery, dict) and "AND" in subquery:
+        elif isinstance(query, OrCondition):
+            for subquery in query.OR:
+                if isinstance(subquery, AndCondition):
                     # Handle nested AND within OR
                     if all(
-                        matches_subquery(analysis, sub)
-                        for sub in subquery["AND"]
+                        matches_subquery(analysis, sub) for sub in subquery.AND
                     ):
                         return True
                 else:
@@ -30,23 +31,25 @@ def matches_query(analysis: Label, queries: List[Dict]) -> bool:
                         return True
 
         # Simple query
-        elif matches_subquery(analysis, query):
+        elif isinstance(query, QueryCondition) and matches_subquery(
+            analysis, query
+        ):
             return True
 
     return False
 
 
-def matches_subquery(analysis: Label, subquery: Dict) -> bool:
+def matches_subquery(analysis: Label, subquery: QueryCondition) -> bool:
     """
     Check if an analysis matches a single subquery with
     improved handling.
     """
     # Get the query key (field name)
-    query_text = subquery["query"]
+    query_text = subquery.query
     field_name = query_text.lower().replace("?", "").replace(" ", "_")
 
     # Get the options to match
-    options = subquery.get("options", [])
+    options = subquery.options or []
 
     # Check if the field exists in the analysis results
     if field_name in analysis.results:

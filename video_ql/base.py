@@ -16,7 +16,7 @@ from langchain_core.output_parsers import JsonOutputParser
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field, create_model
 
-from .models import Label, Query, VideoProcessorConfig
+from .models import Label, Query, QueryConfig, VideoProcessorConfig
 from .query import matches_query
 from .utils import encode_image, get_length_of_video, get_video_fps, video_hash
 from .visualization import VideoVisualizer
@@ -388,7 +388,7 @@ class VideoQL:
 
     def query_video(
         self,
-        query_config: Union[str, Dict],
+        query_config: Union[str, Dict, QueryConfig],
         output_path: str = "results/query_output.mp4",
     ) -> List[int]:
         """
@@ -396,16 +396,18 @@ class VideoQL:
         Returns indices of frames that match the query
 
         Args:
-            query_config: Path to a YAML file or a dict containing query
-                configuration
-            display: Whether to display matching segments
-            save_video: Whether to save matching segments to a video file
-            output_path: Path to save the output video (if save_video is True)
+            query_config: Path to a YAML file, a dict, or a QueryConfig object
+                containing query configuration
+            output_path: Path to save the output video
         """
         # Load query config if it's a path
         if isinstance(query_config, str):
             with open(query_config, "r") as f:
-                query_config = yaml.safe_load(f)
+                query_data = yaml.safe_load(f)
+                query_config = QueryConfig(**query_data)
+        # Convert dict to QueryConfig if needed
+        elif isinstance(query_config, dict):
+            query_config = QueryConfig(**query_config)
 
         matching_frames = []
 
@@ -417,9 +419,7 @@ class VideoQL:
             analysis = self.__cache[idx]
 
             # If the analysis matches any of the queries
-            if matches_query(
-                analysis, query_config["queries"]  # type: ignore
-            ):
+            if matches_query(analysis, query_config.queries):
 
                 video_idx_lb = int(idx * self.effective_stride)
                 video_idx_ub = int((idx + 1) * self.effective_stride)

@@ -8,7 +8,7 @@ import cv2
 import yaml
 
 from .base import VideoQL
-from .models import Query, VideoProcessorConfig
+from .models import Query, QueryConfig, VideoProcessorConfig
 
 
 def parse_args():
@@ -89,7 +89,8 @@ def main():  # pragma: no cover
     )
 
     # Load the query
-    query_config = load_config(args.query)
+    query_data = load_config(args.query)
+    query_config = QueryConfig(**query_data)
 
     # Find matching frames
     matching_frames = video_ql.query_video(query_config)
@@ -106,7 +107,7 @@ def main():  # pragma: no cover
         with open(os.path.join(args.output, "query_results.json"), "w") as f:
             json.dump(
                 {
-                    "query_config": query_config,
+                    "query_config": query_config.dict(),
                     "matching_frames": [
                         {
                             "index": idx,

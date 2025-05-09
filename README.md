@@ -24,7 +24,7 @@ video_ql provides both a Python API and a CLI interface for video analysis and q
 
 ```python
 from video_ql import VideoQL
-from video_ql.models import Query
+from video_ql.models import Query, QueryCondition, OrCondition, QueryConfig
 
 # Define your queries
 queries = [
@@ -52,20 +52,17 @@ video_ql = VideoQL(
 # Analyze entire video
 results = video_ql.analyze_video(display=True)
 
-# Query specific conditions
-query_config = {
-    "queries": [
-        {
-            "OR": [
-                {
-                    "query": "Is the driver present in the forklift?",
-                    "options": ["yes"]
-                }
-            ]
-        }
+# Query specific conditions using our Pydantic models
+query_config = QueryConfig(
+    queries=[
+        QueryCondition(
+            query="Is the driver present in the forklift?",
+            options=["yes"]
+        )
     ]
-}
+)
 
+# Query the video
 matching_frames = video_ql.query_video(query_config)
 ```
 

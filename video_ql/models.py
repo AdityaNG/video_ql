@@ -2,7 +2,7 @@
 Data models for video_ql project.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from pydantic import BaseModel
 
@@ -32,3 +32,28 @@ class Label(BaseModel):
     timestamp: float
     results: Dict[str, Any]
     error: Optional[str] = None
+
+
+class QueryCondition(BaseModel):
+    """Represents a single query condition"""
+
+    query: str
+    options: Optional[List[str]] = None
+
+
+class AndCondition(BaseModel):
+    """Represents a logical AND of multiple query conditions"""
+
+    AND: List[QueryCondition]
+
+
+class OrCondition(BaseModel):
+    """Represents a logical OR of multiple query conditions"""
+
+    OR: List[Union[QueryCondition, AndCondition]]
+
+
+class QueryConfig(BaseModel):
+    """Represents a complete query configuration"""
+
+    queries: List[Union[QueryCondition, AndCondition, OrCondition]]
