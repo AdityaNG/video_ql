@@ -60,10 +60,10 @@ def main():  # pragma: no cover
     config = load_config(args.config)
 
     video_processor_config = VideoProcessorConfig(**{
-        "fps": config.get("fps", 1.0),
-        "tile_frames": config.get("tile_frames", (3, 3)),
-        "frame_stride": config.get("frame_stride", 9),
-        "max_resolution": config.get("max_resolution", (640, 360)),
+        "fps": config.get("fps"),
+        "tile_frames": config.get("tile_frames"),
+        "frame_stride": config.get("frame_stride"),
+        "max_resolution": config.get("max_resolution"),
     })
 
     # Convert config queries to Query objects
@@ -71,8 +71,8 @@ def main():  # pragma: no cover
         Query(
             query=q["query"],
             options=q.get("options"),
-            short_question=q.get("short_question", q["query"]),
-            short_options=q.get("short_options", q.get("options", [])),
+            short_query=q.get("short_query"),
+            short_options=q.get("short_options"),
         )
         for q in config["queries"]
     ]
@@ -121,8 +121,7 @@ def main():  # pragma: no cover
 
         # Display or save matching frames
         for i, idx in enumerate(matching_frames):
-            cache_idx = idx // config.get("frame_stride", 9)
-            analysis = video_ql[cache_idx]
+            analysis = video_ql[idx]
 
             # Extract the frame
             frames = video_ql._extract_frames(idx, 1)

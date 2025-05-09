@@ -17,6 +17,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.runnables import chain
 from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
 from PIL import Image
 from pydantic import BaseModel, Field, create_model
 
@@ -70,12 +71,15 @@ class VideoQL:
         context: str = "Answer the following",
         video_processor_config: Optional[VideoProcessorConfig] = None,
         cache_dir: str = "~/.cache/video_ql/",
-        model_name: str = "gpt-4o-mini",
+        disable_cache: bool = False,
+        # model_name: str = "gpt-4o-mini",
+        model_name: str = "claude-3-haiku-20240307",
     ):
         """Initialize the VideoQL instance"""
         self.video_path = video_path
         self.queries = queries
         self.context = context
+        self.disable_cache = disable_cache
         self.model_name = model_name
 
         # Expand the cache directory if it starts with ~
@@ -134,6 +138,9 @@ class VideoQL:
     def _load_cache(self) -> Dict[int, Label]:
         """Load the cache from disk"""
         cache = {}
+        if self.disable_cache:
+            return cache
+
         if os.path.exists(self.cache_path):
             try:
                 with open(self.cache_path, "r") as f:
@@ -146,6 +153,9 @@ class VideoQL:
 
     def _save_cache(self):
         """Save the cache to disk"""
+        if self.disable_cache:
+            return
+
         cache_data = {k: v.dict() for k, v in self.__cache.items()}
         with open(self.cache_path, "w") as f:
             json.dump(cache_data, f, indent=2)
@@ -256,9 +266,16 @@ class VideoQL:
         """Analyze a single frame using the vision model"""
         image_base64 = self._encode_image(frame["frame"])
 
-        model = ChatOpenAI(
-            temperature=0.3, model=self.model_name, max_tokens=1024
-        )
+        if self.model_name in ['gpt-4o-mini']:
+            model = ChatOpenAI(
+                temperature=0.3, model=self.model_name, max_tokens=1024
+            )
+        elif self.model_name in ['claude-3-haiku-20240307']:
+            model = ChatAnthropic(
+                temperature=0.3, model=self.model_name, max_tokens=1024
+            )
+        else:
+            raise ValueError(f"Unknown model name: {self.model_name}")
 
         try:
             msg = model.invoke(
@@ -431,7 +448,7 @@ class VideoQL:
         
         # Create a blue semi-transparent box in the top-left corner
         box_height = 30 * (len(status_info) + 1)  # Height based on number of items
-        box_width = 300  # Fixed width
+        box_width = int(0.9*w)  # Fixed width
         
         # Create blue box with transparency
         overlay = vis_frame.copy()
@@ -510,7 +527,7 @@ class VideoQL:
         query_config: Union[str, Dict], 
         display: bool = False,
         save_video: bool = False,
-        output_path: str = "results/query_output.mp4"
+        output_path: str = "results/query_output.mp4",
     ) -> List[int]:
         """
         Query the video based on a query configuration
@@ -530,8 +547,7 @@ class VideoQL:
         matching_frames = []
 
         # Process all frames first (if not already in cache)
-        if display or save_video:
-            self.analyze_video(display=False, save_frames=False)
+        self.analyze_video(display=False, save_frames=False)
 
         # Now search through cached results
         for idx in sorted(self.__cache.keys()):

@@ -1,4 +1,5 @@
 langchain[openai]
+langchain[anthropic]
 langchain-community
 opencv-python
 pydantic
