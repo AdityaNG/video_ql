@@ -59,12 +59,14 @@ def main():  # pragma: no cover
     args = parse_args()
     config = load_config(args.config)
 
-    video_processor_config = VideoProcessorConfig(**{
-        "fps": config.get("fps"),
-        "tile_frames": config.get("tile_frames"),
-        "frame_stride": config.get("frame_stride"),
-        "max_resolution": config.get("max_resolution"),
-    })
+    video_processor_config = VideoProcessorConfig(
+        **{
+            "fps": config.get("fps"),
+            "tile_frames": config.get("tile_frames"),
+            "frame_stride": config.get("frame_stride"),
+            "max_resolution": config.get("max_resolution"),
+        }
+    )
 
     # Convert config queries to Query objects
     queries = [
@@ -132,7 +134,7 @@ def main():  # pragma: no cover
                 # Save the frame
                 frame_path = os.path.join(
                     args.output,
-                    f"match_{i:03d}_frame_{idx:04d}_{analysis.timestamp:.2f}s.jpg",
+                    f"match_{i:03d}_frame_{idx:04d}_{analysis.timestamp:.2f}s.jpg",  # noqa
                 )
                 cv2.imwrite(frame_path, vis_frame)
 

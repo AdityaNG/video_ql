@@ -12,7 +12,7 @@ class Query(BaseModel):
 
     query: str
     options: Optional[List[str]] = None
-    short_query: Optional[str] = None
+    short_question: Optional[str] = None
     short_options: Optional[List[str]] = None
 
 

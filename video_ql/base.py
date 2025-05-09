@@ -12,56 +12,18 @@ from typing import Any, Dict, List, Optional, Union
 import cv2
 import numpy as np
 import yaml
-from langchain.chains import TransformChain
+from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.runnables import chain
 from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
 from PIL import Image
 from pydantic import BaseModel, Field, create_model
 
 from .models import Label, Query, VideoProcessorConfig
+from .utils import get_length_of_video, get_video_fps, video_hash
 
 NAME = "video_ql"
 
-
-def video_hash(video_path: str) -> str:
-    """Generate a hash for the video file"""
-    file_hash = hashlib.md5()
-    with open(video_path, "rb") as f:
-        # Read in chunks to handle large files
-        for chunk in iter(lambda: f.read(4096), b""):
-            file_hash.update(chunk)
-    return file_hash.hexdigest()
-
-
-def get_length_of_video(video_path: str) -> int:
-    """Get the number of frames in a video by iterating through all frames"""
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        raise ValueError(f"Could not open video file: {video_path}")
-    
-    frame_count = 0
-    while True:
-        ret, _ = cap.read()
-        if not ret:
-            break
-        frame_count += 1
-    
-    cap.release()
-    return frame_count
-
-def get_video_fps(video_path: str) -> float:
-    """Get the frames per second (FPS) of a video"""
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        raise ValueError(f"Could not open video file: {video_path}")
-    
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    
-    cap.release()
-    return fps
 
 class VideoQL:
     def __init__(
@@ -106,11 +68,15 @@ class VideoQL:
         )
         self.video_fps = get_video_fps(video_path)
         # Calculate the correct frame stride based on fps adjustment
-        self.effective_stride = int(self.config.frame_stride * (self.video_fps / self.config.fps))
+        self.effective_stride = int(
+            self.config.frame_stride * (self.video_fps / self.config.fps)
+        )
 
         # Create the frame analysis model
         self.frame_model = self._create_frame_model()
-        self.parser = JsonOutputParser(pydantic_object=self.frame_model)
+        self.parser = JsonOutputParser(
+            pydantic_object=self.frame_model  # type: ignore
+        )
 
         # Load or initialize the cache
         if not os.path.exists(os.path.dirname(self.cache_path)):
@@ -137,7 +103,7 @@ class VideoQL:
 
     def _load_cache(self) -> Dict[int, Label]:
         """Load the cache from disk"""
-        cache = {}
+        cache: Dict[int, Label] = {}
         if self.disable_cache:
             return cache
 
@@ -184,20 +150,22 @@ class VideoQL:
         field_definitions["timestamp"] = (
             float,
             Field(description="Timestamp of the frame in seconds"),
-        )
+        )  # type: ignore
 
         # Create and return the model
-        FrameAnalysis = create_model("FrameAnalysis", **field_definitions)
+        FrameAnalysis = create_model(
+            "FrameAnalysis", **field_definitions
+        )  # type: ignore
 
         return FrameAnalysis
 
     def _create_prompt(self) -> str:
         """Create a prompt based on the queries"""
-        prompt = "Analyze this video frame and provide the following information:\n\n"
+        prompt = "Analyze this video frame and provide the following information:\n\n"  # noqa
 
         for query in self.queries:
             if query.options:
-                prompt += f"- {query.query} Choose from: {', '.join(query.options)}\n"
+                prompt += f"- {query.query} Choose from: {', '.join(query.options)}\n"  # noqa
             else:
                 prompt += f"- {query.query}\n"
 
@@ -213,7 +181,8 @@ class VideoQL:
         return base64.b64encode(image_bytes).decode("utf-8")
 
     def _extract_frames(
-        self, start_idx: int,
+        self,
+        start_idx: int,
         count: int,
         stride: int = 1,
     ) -> List[Dict[str, Any]]:
@@ -224,7 +193,7 @@ class VideoQL:
             raise ValueError(f"Could not open video file: {self.video_path}")
 
         video_fps = cap.get(cv2.CAP_PROP_FPS)
-        frames = []
+        frames = []  # type: ignore
 
         # Set position to start_idx
         cap.set(cv2.CAP_PROP_POS_FRAMES, start_idx)
@@ -256,7 +225,7 @@ class VideoQL:
             frames.append({"frame": frame, "timestamp": timestamp})
 
             # Stride jump
-            for _ in range(stride-1):
+            for _ in range(stride - 1):
                 ret, frame = cap.read()
 
         cap.release()
@@ -266,14 +235,14 @@ class VideoQL:
         """Analyze a single frame using the vision model"""
         image_base64 = self._encode_image(frame["frame"])
 
-        if self.model_name in ['gpt-4o-mini']:
+        if self.model_name in ["gpt-4o-mini"]:
             model = ChatOpenAI(
                 temperature=0.3, model=self.model_name, max_tokens=1024
-            )
-        elif self.model_name in ['claude-3-haiku-20240307']:
+            )  # type: ignore
+        elif self.model_name in ["claude-3-haiku-20240307"]:
             model = ChatAnthropic(
                 temperature=0.3, model=self.model_name, max_tokens=1024
-            )
+            )  # type: ignore
         else:
             raise ValueError(f"Unknown model name: {self.model_name}")
 
@@ -290,7 +259,7 @@ class VideoQL:
                             {
                                 "type": "image_url",
                                 "image_url": {
-                                    "url": f"data:image/jpeg;base64,{image_base64}"
+                                    "url": f"data:image/jpeg;base64,{image_base64}"  # noqa
                                 },
                             },
                         ]
@@ -299,7 +268,7 @@ class VideoQL:
             )
 
             # Parse the output
-            parsed_output = self.parser.parse(msg.content)
+            parsed_output = self.parser.parse(msg.content)  # type: ignore
 
             # Make sure timestamp is included
             if (
@@ -326,28 +295,28 @@ class VideoQL:
             raise IndexError(
                 f"Index {idx} out of bounds for video with {len(self)} frames"
             )
-        
+
         # Calculate the cache index using the effective stride
         cache_idx = idx // self.effective_stride
 
         if cache_idx not in self.__cache:
             # Calculate the actual frame index in the video
             frame_idx = cache_idx * self.effective_stride
-            
+
             # Extract frames for the tile
-            total_frames_needed = self.config.tile_frames[0] * self.config.tile_frames[1]
-            frames = self._extract_frames(
-                frame_idx, 
-                total_frames_needed, 
-                self.config.frame_stride
+            total_frames_needed = (
+                self.config.tile_frames[0] * self.config.tile_frames[1]
             )
-            
+            frames = self._extract_frames(
+                frame_idx, total_frames_needed, self.config.frame_stride
+            )
+
             # Create a tile image from these frames
             tile_image = self.create_tile_image_from_frames(frames)
-            
+
             # Use the timestamp from the first frame
             first_frame_timestamp = frames[0]["timestamp"] if frames else 0
-            
+
             frame = {
                 "frame": tile_image,
                 "timestamp": first_frame_timestamp,
@@ -422,6 +391,7 @@ class VideoQL:
             except Exception as e:
                 print(f"Error processing frame at index {i}: {e}")
                 import traceback
+
                 traceback.print_exc()
 
         # Close any open windows
@@ -433,41 +403,65 @@ class VideoQL:
     def _visualize_results(
         self, frame: np.ndarray, analysis: Label
     ) -> np.ndarray:
-        """Overlay analysis results on the frame with a clean, professional look."""
+        """
+        Overlay analysis results on the frame with a clean,
+        professional look.
+        """
         # Create a copy of the frame
         vis_frame = frame.copy()
         h, w = vis_frame.shape[:2]
-        
+
         # Format results for display
         status_info = {}
         for key, value in analysis.results.items():
             if key != "timestamp":
                 # Convert snake_case to Title Case
-                formatted_key = key.replace('_', ' ').title()
+                formatted_key = key.replace("_", " ").title()
                 status_info[formatted_key] = value
-        
+
         # Create a blue semi-transparent box in the top-left corner
-        box_height = 30 * (len(status_info) + 1)  # Height based on number of items
-        box_width = int(0.9*w)  # Fixed width
-        
+        box_height = 30 * (
+            len(status_info) + 1
+        )  # Height based on number of items
+        box_width = int(0.9 * w)  # Fixed width
+
         # Create blue box with transparency
         overlay = vis_frame.copy()
-        cv2.rectangle(overlay, (10, 10), (10 + box_width, 10 + box_height), (255, 0, 0), -1)
+        cv2.rectangle(
+            overlay,
+            (10, 10),
+            (10 + box_width, 10 + box_height),
+            (255, 0, 0),
+            -1,
+        )
         vis_frame = cv2.addWeighted(overlay, 0.8, vis_frame, 0.2, 0)
-        
+
         # Add text to the box in white
         y_pos = 40
         for key, value in status_info.items():
             text = f"{key}: {value}"
-            cv2.putText(vis_frame, text, (20, y_pos), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            cv2.putText(
+                vis_frame,
+                text,
+                (20, y_pos),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.7,
+                (255, 255, 255),
+                2,
+            )
             y_pos += 30
-        
+
         # Add timestamp at the bottom
-        cv2.putText(vis_frame, f"Time: {analysis.timestamp:.2f}s", 
-                    (10, vis_frame.shape[0] - 20), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
-        
+        cv2.putText(
+            vis_frame,
+            f"Time: {analysis.timestamp:.2f}s",
+            (10, vis_frame.shape[0] - 20),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 255, 255),
+            1,
+        )
+
         # Add error message if present
         if analysis.error:
             cv2.putText(
@@ -479,52 +473,58 @@ class VideoQL:
                 (0, 0, 255),
                 1,
             )
-        
+
         return vis_frame
 
-    def create_tile_image_from_frames(self, frames: List[Dict[str, Any]]) -> np.ndarray:
+    def create_tile_image_from_frames(
+        self, frames: List[Dict[str, Any]]
+    ) -> np.ndarray:
         """Create a tiled image from multiple frames."""
         if not frames:
-            return np.zeros((100, 100, 3), dtype=np.uint8)  # Return empty image if no frames
-        
+            return np.zeros(
+                (100, 100, 3), dtype=np.uint8
+            )  # Return empty image if no frames
+
         # Get dimensions from the first frame
         frame_height, frame_width = frames[0]["frame"].shape[:2]
-        
+
         # Calculate the dimensions of the tiled image
         rows, cols = self.config.tile_frames
         tile_height = rows * frame_height
         tile_width = cols * frame_width
-        
+
         # Create an empty canvas
         tile_image = np.zeros((tile_height, tile_width, 3), dtype=np.uint8)
-        
+
         # Fill the canvas with frames
-        for i, frame_data in enumerate(frames[:rows*cols]):
+        for i, frame_data in enumerate(frames[: rows * cols]):
             row = i // cols
             col = i % cols
-            
+
             y_start = row * frame_height
             y_end = y_start + frame_height
             x_start = col * frame_width
             x_end = x_start + frame_width
-            
+
             tile_image[y_start:y_end, x_start:x_end] = frame_data["frame"]
-        
+
         return tile_image
 
-    def create_tile_image(self, start_idx: int = 0, stride: int = 1) -> np.ndarray:
+    def create_tile_image(
+        self, start_idx: int = 0, stride: int = 1
+    ) -> np.ndarray:
         """Create a tiled image of frames starting from start_idx"""
         frames = self._extract_frames(
             start_idx,
             self.config.tile_frames[0] * self.config.tile_frames[1],
             stride,
         )
-        
+
         return self.create_tile_image_from_frames(frames)
 
     def query_video(
-        self, 
-        query_config: Union[str, Dict], 
+        self,
+        query_config: Union[str, Dict],
         display: bool = False,
         save_video: bool = False,
         output_path: str = "results/query_output.mp4",
@@ -532,9 +532,10 @@ class VideoQL:
         """
         Query the video based on a query configuration
         Returns indices of frames that match the query
-        
+
         Args:
-            query_config: Path to a YAML file or a dict containing query configuration
+            query_config: Path to a YAML file or a dict containing query
+                configuration
             display: Whether to display matching segments
             save_video: Whether to save matching segments to a video file
             output_path: Path to save the output video (if save_video is True)
@@ -554,10 +555,12 @@ class VideoQL:
             analysis = self.__cache[idx]
 
             # If the analysis matches any of the queries
-            if self._matches_query(analysis, query_config["queries"]):
+            if self._matches_query(
+                analysis, query_config["queries"]  # type: ignore
+            ):
 
                 video_idx_lb = int(idx * self.effective_stride)
-                video_idx_ub = int((idx+1) * self.effective_stride)
+                video_idx_ub = int((idx + 1) * self.effective_stride)
 
                 for video_idx in range(video_idx_lb, video_idx_ub):
                     matching_frames.append(video_idx)
@@ -565,19 +568,19 @@ class VideoQL:
         if display or save_video:
             self.play_matching_segments(
                 matching_frames,
-                output_path=output_path if save_video else None
+                output_path=output_path if save_video else None,
             )
 
         return matching_frames
 
     def play_matching_segments(
-        self, 
-        matching_frames: List[int], 
+        self,
+        matching_frames: List[int],
         display_time: float = 0.1,
-        output_path: str = None
+        output_path: Optional[str] = None,
     ) -> None:
         """Play video segments that match the query criteria.
-        
+
         Args:
             matching_frames: List of frame indices that match the query
             display_time: Time to display each frame in seconds
@@ -586,73 +589,76 @@ class VideoQL:
         if not matching_frames:
             print("No matching frames found.")
             return
-        
+
         cap = cv2.VideoCapture(self.video_path)
         if not cap.isOpened():
             raise ValueError(f"Could not open video file: {self.video_path}")
-        
+
         # Get video properties
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps = cap.get(cv2.CAP_PROP_FPS)
-        
+
         # Setup output video writer if requested
         writer = None
         if output_path:
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")  # type: ignore
             writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
-        
+
         # Group consecutive frames into segments
         segments = []
         current_segment = [matching_frames[0]]
-        
+
         for i in range(1, len(matching_frames)):
-            if matching_frames[i] - matching_frames[i-1] <= self.config.frame_stride * 2:
+            if (
+                matching_frames[i] - matching_frames[i - 1]
+                <= self.config.frame_stride * 2
+            ):
                 current_segment.append(matching_frames[i])
             else:
                 segments.append(current_segment)
                 current_segment = [matching_frames[i]]
-        
+
         segments.append(current_segment)
-        
+
         print(f"Found {len(segments)} matching segments")
-        
+
         # Play each segment
         for segment in segments:
             start_idx = segment[0]
             end_idx = segment[-1]
-            
+
             print(f"Playing segment from frame {start_idx} to {end_idx}")
-            
+
             for idx in range(start_idx, end_idx + 1, self.config.frame_stride):
                 # Get the analysis for this frame
                 analysis = self[idx]
-                
+
                 # Get the actual frame from video
                 cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
                 ret, frame = cap.read()
-                
+
                 if not ret:
                     break
-                    
+
                 # Visualize the results
                 vis_frame = self._visualize_results(frame, analysis)
-                
+
                 # Display
                 cv2.imshow("Query Results", vis_frame)
-                
+
                 # Write to output if requested
                 if writer:
                     writer.write(vis_frame)
-                    
+
                 # Wait for key press
                 key = cv2.waitKey(int(display_time * 1000)) & 0xFF
                 if key == 27:  # ESC key
                     break
-            
+
             if cv2.waitKey(1) & 0xFF == 27:  # ESC key
                 break
-        
+
         # Release resources
         cap.release()
         if writer:
@@ -692,7 +698,10 @@ class VideoQL:
         return False
 
     def _matches_subquery(self, analysis: Label, subquery: Dict) -> bool:
-        """Check if an analysis matches a single subquery with improved handling."""
+        """
+        Check if an analysis matches a single subquery with
+        improved handling.
+        """
         # Get the query key (field name)
         query_text = subquery["query"]
         field_name = query_text.lower().replace("?", "").replace(" ", "_")
@@ -702,7 +711,8 @@ class VideoQL:
 
         # Check if the field exists in the analysis results
         if field_name in analysis.results:
-            # If options are specified, check if the analysis value is in the options
+            # If options are specified, check if the analysis value
+            # is in the options
             if options:
                 return analysis.results[field_name] in options
             # Otherwise, just check if the field has a truthy value
