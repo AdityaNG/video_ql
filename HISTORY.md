@@ -4,6 +4,26 @@ Changelog
 
 (unreleased)
 ------------
+- Feat(video_ql/base.py): parallel processing - video_ql/base.py: cache
+  thread safety - video_ql/cli.py: take advantage of multithreading for
+  parallel API calls - video_ql/utils.py - tests/: updated test case -
+  video_ql/VERSION: incremented. [AdityaNG]
+
+  Measured speedup
+  100 threads
+  real    0m29.947s
+  user    1m27.712s
+  sys     0m14.065s
+
+  1 thread
+  real    6m33.628s
+  user    0m28.482s
+  sys     0m9.564s
+
+
+1.1.0 (2025-05-17)
+------------------
+- Release: version 1.1.0 🚀 [AdityaNG]
 - Feat(video_ql): single frame analysis, fast frame count - setup.py:
   package desc change - tests/test_single_frame.py: single frame test
   cases - README.md: single frame usage example -
