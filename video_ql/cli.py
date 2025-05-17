@@ -1,8 +1,10 @@
 """CLI interface for video_ql project."""
 
 import argparse
+import concurrent.futures
 import json
 import os
+from typing import List
 
 import cv2
 import yaml
@@ -45,6 +47,12 @@ def parse_args():
         action="store_true",
         help="Display frames that match the query",
     )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=4,
+        help="Number of threads to use for parallel processing",
+    )
     return parser.parse_args()
 
 
@@ -53,6 +61,15 @@ def load_config(config_path: str) -> dict:
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
     return config
+
+
+def process_frame_chunk(video_ql: VideoQL, indices: List[int]):
+    """Process a chunk of frames in a thread"""
+    for idx in indices:
+        try:
+            video_ql[idx]  # This will compute and cache the frame analysis
+        except Exception as e:
+            print(f"Error processing frame {idx}: {e}")
 
 
 def main():  # pragma: no cover
@@ -88,6 +105,45 @@ def main():  # pragma: no cover
         video_processor_config=video_processor_config,
     )
 
+    # Parallelize the cache population
+    total_frames = len(video_ql)
+    max_threads = min(
+        args.threads, total_frames
+    )  # Don't create more threads than frames
+
+    print(f"Processing {total_frames} frames using {max_threads} threads...")
+
+    # Split the frames into chunks for each thread
+    if max_threads > 0:
+        chunk_size = max(1, total_frames // max_threads)
+        chunks = []
+
+        for i in range(0, total_frames, chunk_size):
+            end = min(i + chunk_size, total_frames)
+            chunks.append(list(range(i, end)))
+
+        # Use a thread pool to process the chunks in parallel
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=max_threads
+        ) as executor:
+            futures = []
+            for chunk in chunks:
+                future = executor.submit(process_frame_chunk, video_ql, chunk)
+                futures.append(future)
+
+            # Wait for all threads to complete
+            for i, future in enumerate(
+                concurrent.futures.as_completed(futures)
+            ):
+                print(f"Thread {i+1}/{len(futures)} completed")
+                # Get any exceptions that occurred
+                try:
+                    future.result()
+                except Exception as e:
+                    print(f"Thread error: {e}")
+
+    print("Frame processing complete. Running query...")
+
     # Load the query
     query_data = load_config(args.query)
     query_config = QueryConfig(**query_data)
@@ -98,6 +154,8 @@ def main():  # pragma: no cover
     # Create output directory if it doesn't exist
     if not os.path.exists(args.output):
         os.makedirs(args.output)
+
+    exit()
 
     # Save and/or display matching frames
     if matching_frames:

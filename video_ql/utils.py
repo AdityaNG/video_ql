@@ -6,6 +6,7 @@ import base64
 import hashlib
 import io
 import os
+import shutil
 import subprocess
 
 import cv2
@@ -53,27 +54,32 @@ def video_hash(video_path: str) -> str:
 def get_length_of_video(video_path: str) -> int:
     """Get the number of frames in a video using FFmpeg for estimation
     and then refining"""
+    estimated_frames = None
+
     # Use FFmpeg to get an estimate of the frame count
     try:
-        cmd = [
-            "ffprobe",
-            "-v",
-            "error",
-            "-select_streams",
-            "v:0",
-            "-count_packets",
-            "-show_entries",
-            "stream=nb_read_packets",
-            "-of",
-            "csv=p=0",
-            video_path,
-        ]
-        result = subprocess.run(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        )
-        estimated_frames = int(result.stdout.strip())
-        return estimated_frames
-    except (ValueError, subprocess.SubprocessError):
+        if shutil.which("ffprobe") is not None:
+            cmd = [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-count_packets",
+                "-show_entries",
+                "stream=nb_read_packets",
+                "-of",
+                "csv=p=0",
+                video_path,
+            ]
+            result = subprocess.run(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+            )
+            estimated_frames = int(result.stdout.strip())
+    except (ValueError, subprocess.SubprocessError, FileNotFoundError) as e:
+        print(f"FFprobe method failed: {e}. Falling back to OpenCV.")
+
+    if estimated_frames is None:
         # Fallback if ffprobe fails
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():

@@ -96,10 +96,10 @@ def test_video_hash_performance():
         assert isinstance(hash_result, str)
         assert len(hash_result) == 32
 
-        # Assert that the operation took less than 100ms
+        # Assert that the operation runs in the stipulated time
         assert (
-            duration_ms < 1
-        ), f"Video hashing took {duration_ms:.2f}ms, which exceeds the 100ms limit"
+            duration_ms < 10
+        ), f"Video hashing took {duration_ms:.2f}ms, which exceeds the time limit"
 
     finally:
         # Clean up

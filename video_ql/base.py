@@ -5,6 +5,7 @@ video_ql base module.
 import hashlib
 import json
 import os
+import threading
 from typing import Any, Dict, List, Optional, Union
 
 import cv2
@@ -25,6 +26,8 @@ NAME = "video_ql"
 
 
 class VideoQL:
+    __cache: Dict[int, Label] = {}
+
     def __init__(
         self,
         video_path: str,
@@ -84,8 +87,11 @@ class VideoQL:
         if not os.path.exists(os.path.dirname(self.cache_path)):
             os.makedirs(os.path.dirname(self.cache_path))
 
-        self.__cache = self._load_cache()
+        # Cache lock for thread safety
+        self.__cache_lock = threading.RLock()
         self.prompt = self._create_prompt()
+
+        self._load_cache()
 
     def _generate_scene_hash(self) -> str:
         """Generate a unique hash for this video analysis setup"""
@@ -109,24 +115,37 @@ class VideoQL:
         if self.disable_cache:
             return cache
 
-        if os.path.exists(self.cache_path):
-            try:
-                with open(self.cache_path, "r") as f:
-                    cache_data = json.load(f)
-                for key, value in cache_data.items():
-                    cache[int(key)] = Label(**value)
-            except Exception as e:
-                print(f"Warning: Could not load cache: {e}")
-        return cache
+        with self.__cache_lock:
+            if os.path.exists(self.cache_path):
+                try:
+                    with open(self.cache_path, "r") as f:
+                        cache_data = json.load(f)
+                    for key, value in cache_data.items():
+                        cache[int(key)] = Label(**value)
+                except Exception as e:
+                    print(f"Warning: Could not load cache: {e}")
 
-    def _save_cache(self):
+            self.__cache = cache
+
+        return self.__cache
+
+    def _update_cache(
+        self,
+        cache_idx: int,
+        analysis: Label,
+    ):
         """Save the cache to disk"""
         if self.disable_cache:
             return
 
-        cache_data = {k: v.model_dump() for k, v in self.__cache.items()}
-        with open(self.cache_path, "w") as f:
-            json.dump(cache_data, f, indent=2)
+        with self.__cache_lock:  # Acquire lock before saving
+            self.__cache[cache_idx] = analysis
+
+            cache_data = {k: v.model_dump() for k, v in self.__cache.items()}
+            with open(self.cache_path, "w") as f:
+                json.dump(cache_data, f, indent=2)
+
+        self._load_cache()
 
     def _create_frame_model(self) -> BaseModel:
         """Create a Pydantic model based on the queries"""
@@ -265,9 +284,8 @@ class VideoQL:
             }
 
             analysis = self._analyze_frame(frame)
-            self.__cache[cache_idx] = analysis
-            # Save the updated cache
-            self._save_cache()
+            # Update the cache
+            self._update_cache(cache_idx, analysis)
 
         return self.__cache[cache_idx]
 
@@ -305,9 +323,6 @@ class VideoQL:
             try:
                 analysis = self[i]
                 results.append(analysis)
-                print(
-                    f"Processed frame at timestamp: {analysis.timestamp:.2f}s"
-                )
 
                 # If we need to display or save, get the original frame
                 if display or save_frames:
