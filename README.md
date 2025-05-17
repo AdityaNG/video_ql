@@ -101,6 +101,16 @@ video_ql --video path/to/video.mp4 \
          --display
 ```
 
+You may also process a single frame using the following
+
+```bash
+python3 -m video_ql.single_frame \
+         --image path/to/image.png \
+         --config config.yaml \
+         --output results/query_results.json \
+         --display
+```
+
 ## Development
 
 Read the [CONTRIBUTING.md](CONTRIBUTING.md) file.

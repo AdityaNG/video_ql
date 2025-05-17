@@ -32,7 +32,7 @@ def read_requirements(path):
 setup(
     name="video_ql",
     version=read("video_ql", "VERSION"),
-    description="Awesome video_ql created by AdityaNG",
+    description="Searching through video data by asking the right questions",
     url="https://github.com/AdityaNG/video_ql/",
     long_description=read("README.md"),
     long_description_content_type="text/markdown",
