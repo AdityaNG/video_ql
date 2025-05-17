@@ -4,6 +4,18 @@ Changelog
 
 (unreleased)
 ------------
+- Feat(video_ql): single frame analysis, fast frame count - setup.py:
+  package desc change - tests/test_single_frame.py: single frame test
+  cases - README.md: single frame usage example -
+  video_ql/single_frame.py: `SingleFrameAnalyzer` - video_ql/utils.py:
+  faster `get_length_of_video`, `video_hash` implementations -
+  tests/test_utils.py: time based tests for the above - VERSION:
+  increment. [AdityaNG]
+
+
+1.0.0 (2025-05-09)
+------------------
+- Release: version 1.0.0 🚀 [AdityaNG]
 - Test(tests/test_video_ql.py): coverage to 48. [AdityaNG]
 - Test(tests/test_query.py): converage to 54. [AdityaNG]
 - Test(tests/test_utils.py): converage to 48. [AdityaNG]
