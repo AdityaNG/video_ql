@@ -4,6 +4,23 @@ Changelog
 
 (unreleased)
 ------------
+- Feat(video_ql): query_proposer - video_ql/cli.py: updated to use NLP
+  query proposer - README.md: docs for query_proposer -
+  requirements.txt: rich added for CLI UX - tests/test_utils.py: timing
+  adjusted - video_ql/base.py: helper calls to query_proposer -
+  video_ql/query_proposer.py: linting - video_ql/yaml_analysis.py: moved
+  original CLI tool here - video_ql/VERSION: incrementy. [AdityaNG]
+- Feat(video_ql): query_proposer - video_ql/query_proposer.py: query
+  proposer takes the context as input and produces the list of possible
+  queries as input - tests/test_query_proposer.py: test cases -
+  README.md: updated with usage instructions - tests/test_utils.py:
+  timing relaxed - video_ql/cli.py: fixed, removed unintended exit -
+  VERSION: increment. [AdityaNG]
+
+
+1.2.0 (2025-05-17)
+------------------
+- Release: version 1.2.0 🚀 [AdityaNG]
 - Feat(video_ql/base.py): parallel processing - video_ql/base.py: cache
   thread safety - video_ql/cli.py: take advantage of multithreading for
   parallel API calls - video_ql/utils.py - tests/: updated test case -
