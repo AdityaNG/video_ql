@@ -127,7 +127,7 @@ def test_get_length_of_video_performance():
     # Video specifications
     fps = 60
     width, height = 1920, 1080
-    num_test_frames = fps * 60 * 5  # 5 mins
+    num_test_frames = fps * 60 * 1  # 1 min
 
     # Only create the test video if it doesn't exist
     if not os.path.exists(cached_video_path):

@@ -66,8 +66,59 @@ query_config = QueryConfig(
 matching_frames = video_ql.query_video(query_config)
 ```
 
+You can also have VideoQL automatically generate the queries and query config as shown below:
+```py
+from video_ql import VideoQL
+from video_ql.query_proposer import generate_queries_from_context
+
+# Define the context for your video analysis
+context = "You are watching a construction site for safety compliance monitoring."
+
+# Automatically generate queries based on the context using the selected model
+queries = generate_queries_from_context(
+    context=context,
+    model_name="gpt-4o-mini",  # Model can be substituted as desired
+    num_queries=5
+)
+
+# Initialize VideoQL with generated queries
+video_ql = VideoQL(
+    video_path="path/to/your/video.mp4",
+    queries=queries,
+    context=context
+)
+
+# Proceed with video analysis as usual
+results = video_ql.analyze_video(display=True)
+```
+
 ### Command Line Interface
 
+#### Natural Language Analysis
+
+Use the CLI tool to analyze your video
+```bash
+$video_ql --video path/to/video.mp4
+=====================================
+   Welcome to Interactive VideoQL   
+=====================================
+
+First, let's create a context for your video analysis.
+Describe the video content and what you're interested in tracking or analyzing.
+Video context:  ... your context here
+
+Generating queries based on your description...
+
+Generated queries:
+1. Query 1?
+   Options: Yes, No
+2. Another generated query?
+   Options: ...
+
+... enjoy your video analysis
+```
+
+#### YAML Analysis
 1. Create a config file (`config.yaml`):
 ```yaml
 queries:
@@ -94,7 +145,7 @@ queries:
 
 3. Run the CLI:
 ```bash
-video_ql --video path/to/video.mp4 \
+python3 -m video_ql.yaml_analysis --video path/to/video.mp4 \
          --config config.yaml \
          --query query.yaml \
          --output results/query_results \

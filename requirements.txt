@@ -6,3 +6,4 @@ pydantic
 PyYAML
 pillow
 numpy
+rich

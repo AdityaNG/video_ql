@@ -19,6 +19,10 @@ from pydantic import BaseModel, Field, create_model
 
 from .models import Label, Query, QueryConfig, VideoProcessorConfig
 from .query import matches_query
+from .query_proposer import (
+    generate_queries_from_context,
+    generate_query_config_from_question,
+)
 from .utils import encode_image, get_length_of_video, get_video_fps, video_hash
 from .visualization import VideoVisualizer
 
@@ -443,3 +447,64 @@ class VideoQL:
                     matching_frames.append(video_idx)
 
         return matching_frames
+
+    def generate_queries(
+        self,
+        context: Optional[str] = None,
+        model_name: Optional[str] = None,
+        num_queries: int = 5,
+    ) -> List[Query]:
+        """
+        Generate relevant queries for the video based on a context description.
+
+        Args:
+            context: Description of the video content and analysis goals
+                (defaults to self.context)
+            model_name: LLM model to use (defaults to self.model_name)
+            num_queries: Number of queries to generate
+
+        Returns:
+            List of Query objects
+        """
+        if context is None:
+            context = self.context
+
+        if model_name is None:
+            model_name = self.model_name
+
+        return generate_queries_from_context(
+            context=context, model_name=model_name, num_queries=num_queries
+        )
+
+    def generate_query_config(
+        self, question: str, model_name: Optional[str] = None
+    ) -> QueryConfig:
+        """
+        Generate a QueryConfig from a natural language question.
+
+        This converts a natural language question into a structured query
+        configuration that can be used to query the video.
+
+        Args:
+            question: Natural language question about the video
+            model_name: LLM model to use (defaults to self.model_name)
+
+        Returns:
+            QueryConfig object
+        """
+        if model_name is None:
+            model_name = self.model_name
+
+        # First make sure we have some analysis results to work with
+        if not self.__cache:
+            # Process at least a few frames to build some context
+            for i in range(min(5, len(self))):
+                self[i]  # This will compute and cache the frame analysis
+
+        return generate_query_config_from_question(
+            queries=self.queries,
+            context=self.context,
+            analysis=self.__cache,
+            question=question,
+            model_name=model_name,
+        )
