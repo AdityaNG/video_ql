@@ -98,6 +98,7 @@ video_ql --video path/to/video.mp4 \
          --config config.yaml \
          --query query.yaml \
          --output results/query_results \
+         --threads 100 \
          --display
 ```
 
@@ -110,6 +111,34 @@ python3 -m video_ql.single_frame \
          --output results/query_results.json \
          --display
 ```
+
+The query proposer helps you automatically generate relevant queries for your video content based on a provided context.
+```python
+from video_ql.query_proposer import generate_queries_from_context, save_queries_to_yaml
+
+# Generate queries based on context
+context = "Security camera footage of a parking lot at night"
+queries = generate_queries_from_context(
+    context=context,
+    model_name="gpt-4o-mini",  # or "claude-3-haiku-20240307" 
+    num_queries=5
+)
+
+# Save queries to a YAML file
+save_queries_to_yaml(queries, "generated_queries.yaml")
+```
+
+You can use the query proposer from the command line:
+
+```bash
+python -m video_ql.query_proposer \
+    --context "Dashcam footage of urban driving in rainy conditions" \
+    --model "gpt-4o-mini" \
+    --num-queries 7 \
+    --output "dashcam_queries.yaml"
+```
+
+
 
 ## Development
 

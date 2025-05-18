@@ -155,8 +155,6 @@ def main():  # pragma: no cover
     if not os.path.exists(args.output):
         os.makedirs(args.output)
 
-    exit()
-
     # Save and/or display matching frames
     if matching_frames:
         print(f"Found {len(matching_frames)} matching frames")
