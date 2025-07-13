@@ -33,6 +33,12 @@ class Label(BaseModel):
     results: Dict[str, Any]
     error: Optional[str] = None
 
+    # Costing
+    prompt_tokens: Optional[int] = None
+    completion_tokens: Optional[int] = None
+    total_tokens: Optional[int] = None
+    cost: Optional[float] = None
+
 
 class QueryCondition(BaseModel):
     """Represents a single query condition"""

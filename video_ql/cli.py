@@ -55,10 +55,90 @@ def parse_args():
     return parser.parse_args()
 
 
+def display_cost_estimate(video_ql: VideoQL):
+    """Display estimated cost for processing the video."""
+    console = Console()
+
+    # Get cost estimate
+    estimate = video_ql.estimate_processing_cost()
+
+    console.print("\n[bold]Estimated Processing Cost[/bold]")
+    console.print(f"Video model: [cyan]{estimate['model']}[/cyan]")
+    console.print(
+        f"Total frames to process: [cyan]{estimate['total_frames']:,}[/cyan]"
+    )
+    console.print(
+        f"Estimated API calls: [cyan]{estimate['api_calls']:,}[/cyan]"
+    )
+    console.print(
+        f"Estimated token usage: [cyan]{estimate['estimated_tokens']:,}[/cyan]"
+    )
+    console.print(
+        f"Estimated cost: [cyan]${estimate['estimated_cost_usd']:.4f} USD[/cyan]"  # noqa
+    )
+
+    # Ask for confirmation if cost is high
+    if estimate["estimated_cost_usd"] > 1.0:
+        return Confirm.ask(
+            "[yellow]Processing cost may be significant. Continue?[/yellow]"
+        )
+
+    return True
+
+
+def display_final_cost(video_ql: VideoQL):
+    """Display the actual cost of processing the video."""
+    console = Console()
+
+    # Get actual cost data
+    cost_data = video_ql.get_processing_cost()
+
+    console.print("\n[bold]Processing Cost Summary[/bold]")
+    console.print(f"Video model: [cyan]{cost_data['model']}[/cyan]")
+    console.print(
+        f"Processed frames: [cyan]{cost_data['processed_frames']:,}/{cost_data['total_frames']:,} ({cost_data['completion_percentage']:.1f}%)[/cyan]"  # noqa
+    )
+    console.print(f"API calls made: [cyan]{cost_data['api_calls']:,}[/cyan]")
+    console.print(
+        f"Total tokens used: [cyan]{cost_data['total_tokens']:,}[/cyan]"
+    )
+    console.print(
+        f"  - Prompt tokens: [cyan]{cost_data['prompt_tokens']:,}[/cyan]"
+    )
+    console.print(
+        f"  - Completion tokens: [cyan]{cost_data['completion_tokens']:,}[/cyan]"  # noqa
+    )
+    console.print(
+        f"Total cost: [cyan]${cost_data['total_cost_usd']:.4f} USD[/cyan]"
+    )
+
+
 def process_frames_in_chunks(video_ql: VideoQL, num_threads: int = 4):
     """Process video frames in parallel chunks to build the cache."""
     console = Console()
     total_frames = len(video_ql)
+
+    # Display cost estimate before processing
+    console.print("\n[bold]Estimating processing cost...[/bold]")
+    estimate = video_ql.estimate_processing_cost()
+    console.print(f"Model: [cyan]{estimate['model']}[/cyan]")
+    console.print(
+        f"Estimated API calls: [cyan]{estimate['api_calls']:,}[/cyan]"
+    )
+    console.print(
+        f"Estimated token usage: [cyan]{estimate['estimated_tokens']:,}[/cyan]"
+    )
+    console.print(
+        f"Estimated cost: [cyan]${estimate['estimated_cost_usd']:.4f} USD[/cyan]"  # noqa
+    )
+
+    # Ask for confirmation if cost is high
+    if estimate["estimated_cost_usd"] > 1.0:
+        if not Confirm.ask(
+            "[yellow]Processing cost may be significant. Continue?[/yellow]"
+        ):
+            console.print("[yellow]Processing canceled by user.[/yellow]")
+            return
 
     console.print(f"\n[bold]Processing {total_frames} frames...[/bold]")
 
@@ -96,15 +176,28 @@ def process_frames_in_chunks(video_ql: VideoQL, num_threads: int = 4):
             futures.append(future)
 
         # Show progress while threads are working
+        last_update_time = time.time()
         while processed < total_frames:
             progress = processed / total_frames
             progress_bar = "█" * int(20 * progress) + "░" * (
                 20 - int(20 * progress)
             )
+
+            # Update the progress bar
             console.print(
                 f"\r[bold blue]{progress_bar}[/bold blue] {processed}/{total_frames}",  # noqa
                 end="\r",
             )
+
+            # Show cost update every 10 seconds
+            current_time = time.time()
+            if current_time - last_update_time > 10:
+                cost_data = video_ql.get_processing_cost()
+                console.print(
+                    f"\nToken usage so far: {cost_data['total_tokens']:,} (${cost_data['total_cost_usd']:.4f} USD)"  # noqa
+                )
+                last_update_time = current_time
+
             time.sleep(0.5)  # Update progress every half second
 
             # Check if all futures are done
@@ -123,6 +216,9 @@ def process_frames_in_chunks(video_ql: VideoQL, num_threads: int = 4):
                 future.result()
             except Exception as e:
                 console.print(f"[red]Thread error: {e}[/red]")
+
+    # Display final cost information
+    display_final_cost(video_ql)
 
     console.print("\n[bold green]✓ Processing complete![/bold green]")
 
@@ -490,6 +586,9 @@ def main():
 
     # Start interactive query loop
     interactive_query_loop(video_ql, args.output_dir, args.model)
+
+    # Display final cost information
+    display_final_cost(video_ql)
 
     # Goodbye message
     console.print(

@@ -196,44 +196,314 @@ class VideoQL:
 
         return prompt
 
+    def _get_cost_per_token(self) -> Dict[str, Any]:
+        """
+        Get cost per token and image pricing for the current model (in USD).
+
+        Returns a dictionary with pricing information specific to the model.
+        """
+        # Token pricing for different models (prompt, completion, and image)
+        model_pricing = {
+            # OpenAI models (as of May 2023)
+            "gpt-4o-mini": {
+                "prompt": 1.5e-7,  # $0.00000015 per token
+                "completion": 6e-7,  # $0.0000006 per token
+                "image_fixed": 0.000005,  # $0.000005 per image (fixed cost)
+                "image_token_method": "fixed",  # Fixed cost per image
+            },
+            "gpt-4o": {
+                "prompt": 5e-6,  # $0.000005 per token
+                "completion": 1.5e-5,  # $0.000015 per token
+                "image_fixed": 0.00002,  # $0.00002 per image (fixed cost)
+                "image_token_method": "fixed",  # Fixed cost per image
+            },
+            "gpt-4-vision-preview": {
+                "prompt": 1e-5,  # $0.00001 per token
+                "completion": 3e-5,  # $0.00003 per token
+                "image_fixed": 0.00002,  # $0.00002 per image (fixed cost)
+                "image_token_method": "fixed",  # Fixed cost per image
+            },
+            # Anthropic models (as of May 2023)
+            "claude-3-haiku-20240307": {
+                "prompt": 2.5e-7,  # $0.00000025 per token
+                "completion": 1.25e-6,  # $0.00000125 per token
+                "image_token_method": "pixel_area",  # Based on pixel area
+                "image_token_ratio": 750,  # pixels per token
+            },
+            "claude-3-sonnet-20240229": {
+                "prompt": 3e-6,  # $0.000003 per token
+                "completion": 1.5e-5,  # $0.000015 per token
+                "image_token_method": "pixel_area",  # Based on pixel area
+                "image_token_ratio": 750,  # pixels per token
+            },
+            "claude-3-opus-20240229": {
+                "prompt": 1e-5,  # $0.00001 per token
+                "completion": 6e-5,  # $0.00006 per token
+                "image_token_method": "pixel_area",  # Based on pixel area
+                "image_token_ratio": 750,  # pixels per token
+            },
+        }
+
+        if self.model_name in model_pricing:
+            return model_pricing[self.model_name]
+
+        # Default pricing if model not found - conservative estimate
+        return {
+            "prompt": 1e-5,  # $0.00001 per token
+            "completion": 3e-5,  # $0.00003 per token
+            "image_fixed": 0.00002,  # $0.00002 per image (fixed cost)
+            "image_token_method": "fixed",  # Fixed cost per image
+        }
+
+    def estimate_processing_cost(self) -> Dict[str, Any]:
+        """
+        Estimate the cost of processing the entire video.
+
+        Returns:
+            Dict containing estimated tokens and cost
+        """
+        # Get sample frame to estimate image size and cost
+        sample_frame = self.extract_frames(0, 1)[0]
+        image_cost_data = self._calculate_image_cost(sample_frame)
+
+        # Estimate text tokens per API call (prompt instructions + completion)
+        text_prompt_tokens = len(self.prompt) // 4  # ~4 chars per token
+        format_instruction_tokens = 100  # Rough estimate
+        avg_completion_tokens = 300  # Rough estimate for completion
+
+        # Get pricing for the model
+        pricing = self._get_cost_per_token()
+
+        # Calculate total number of API calls needed
+        total_frames_to_process = len(self)
+        actual_api_calls = (
+            total_frames_to_process + self.effective_stride - 1
+        ) // self.effective_stride
+
+        # For OpenAI models with fixed image cost
+        if pricing["image_token_method"] == "fixed":
+            # Cost per API call
+            image_cost_per_call = (
+                pricing.get("image_fixed", 0.00002) * self.num_frames_per_tile
+            )
+            text_token_cost_per_call = (
+                text_prompt_tokens + format_instruction_tokens
+            ) * pricing["prompt"] + avg_completion_tokens * pricing[
+                "completion"
+            ]
+            cost_per_call = image_cost_per_call + text_token_cost_per_call
+
+            # Calculate total estimated cost
+            estimated_cost = cost_per_call * actual_api_calls
+
+            # Estimate token usage (not including image fixed costs)
+            prompt_tokens = (
+                text_prompt_tokens + format_instruction_tokens
+            ) * actual_api_calls
+            completion_tokens = avg_completion_tokens * actual_api_calls
+            total_tokens = prompt_tokens + completion_tokens
+
+        # For Anthropic models with pixel-based image tokens
+        else:
+            # Image tokens per API call (for all frames in the tile)
+            image_tokens_per_tile = (
+                image_cost_data.get("image_tokens", 0)
+                * self.num_frames_per_tile
+            )
+
+            # Total tokens per API call
+            prompt_tokens_per_call = (
+                text_prompt_tokens
+                + format_instruction_tokens
+                + image_tokens_per_tile
+            )
+            completion_tokens_per_call = avg_completion_tokens
+            # tokens_per_call = (
+            #     prompt_tokens_per_call + completion_tokens_per_call
+            # )
+
+            # Cost per API call
+            cost_per_call = (prompt_tokens_per_call * pricing["prompt"]) + (
+                completion_tokens_per_call * pricing["completion"]
+            )
+
+            # Calculate total estimated cost and tokens
+            estimated_cost = cost_per_call * actual_api_calls
+            prompt_tokens = prompt_tokens_per_call * actual_api_calls
+            completion_tokens = completion_tokens_per_call * actual_api_calls
+            total_tokens = prompt_tokens + completion_tokens
+
+        return {
+            "total_frames": total_frames_to_process,
+            "api_calls": actual_api_calls,
+            "estimated_tokens": total_tokens,
+            "estimated_prompt_tokens": prompt_tokens,
+            "estimated_completion_tokens": completion_tokens,
+            "estimated_cost_usd": estimated_cost,
+            "model": self.model_name,
+            "cost_per_api_call": cost_per_call,
+            "frames_per_api_call": self.num_frames_per_tile,
+            "pricing_method": pricing["image_token_method"],
+            "sample_image_dimensions": f"{image_cost_data['image_width']}x{image_cost_data['image_height']}",  # noqa
+        }
+
+    def _calculate_image_cost(self, frame: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Calculate the token usage and cost for processing an image based
+        on model-specific pricing.
+
+        Args:
+            frame: Dictionary containing the frame data including the image
+
+        Returns:
+            Dictionary with token and cost estimates for the image
+        """
+        pricing = self._get_cost_per_token()
+        image = frame["frame"]
+        height, width = image.shape[:2]
+
+        # Calculate based on pricing method
+        if pricing["image_token_method"] == "fixed":
+            # Fixed cost per image (OpenAI style)
+            image_tokens = 0  # Not calculated in tokens
+            image_cost = pricing.get(
+                "image_fixed", 0.00002
+            )  # Default to $0.00002 per image
+
+            return {
+                "image_tokens": image_tokens,
+                "image_width": width,
+                "image_height": height,
+                "image_cost": image_cost,
+            }
+
+        elif pricing["image_token_method"] == "pixel_area":
+            # Cost based on pixel area (Anthropic style)
+            pixel_area = width * height
+            token_ratio = pricing.get(
+                "image_token_ratio", 750
+            )  # Default to 750 pixels per token
+
+            # Calculate tokens based on pixel area
+            image_tokens = pixel_area / token_ratio
+            image_cost = (
+                image_tokens * pricing["prompt"]
+            )  # Image tokens are charged at prompt rate
+
+            return {
+                "image_tokens": image_tokens,
+                "image_width": width,
+                "image_height": height,
+                "image_cost": image_cost,
+            }
+
+        # Fallback for unknown methods
+        return {
+            "image_tokens": 0,
+            "image_width": width,
+            "image_height": height,
+            "image_cost": 0,
+        }
+
     def _analyze_frame(self, frame: Dict[str, Any]) -> Label:
         """Analyze a single frame using the vision model"""
         image_base64 = encode_image(frame["frame"])
 
-        if self.model_name in ["gpt-4o-mini"]:
-            model = ChatOpenAI(
+        # Calculate image token usage and cost
+        image_cost_data = self._calculate_image_cost(frame)
+
+        if self.model_name.startswith("gpt-"):
+            model = ChatOpenAI(  # type: ignore
                 temperature=0.3, model=self.model_name, max_tokens=1024
             )  # type: ignore
-        elif self.model_name in ["claude-3-haiku-20240307"]:
-            model = ChatAnthropic(
+        elif self.model_name.startswith("claude-"):
+            model = ChatAnthropic(  # type: ignore
                 temperature=0.3, model=self.model_name, max_tokens=1024
             )  # type: ignore
         else:
             raise ValueError(f"Unknown model name: {self.model_name}")
 
         try:
-            msg = model.invoke(
-                [
-                    HumanMessage(
-                        content=[
-                            {"type": "text", "text": self.prompt},
-                            {
-                                "type": "text",
-                                "text": self.parser.get_format_instructions(),
+            messages = [
+                HumanMessage(
+                    content=[
+                        {"type": "text", "text": self.prompt},
+                        {
+                            "type": "text",
+                            "text": self.parser.get_format_instructions(),
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_base64}"
                             },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{image_base64}"  # noqa
-                                },
-                            },
-                        ]
-                    )
-                ]
-            )
+                        },
+                    ]
+                )
+            ]
+
+            # Invoke the model and get response
+            response = model.invoke(messages)
+
+            # Get token usage from response if available
+            token_usage = getattr(response, "usage", None)
+            prompt_tokens = getattr(token_usage, "prompt_tokens", None)
+            completion_tokens = getattr(token_usage, "completion_tokens", None)
+            total_tokens = getattr(token_usage, "total_tokens", None)
+
+            # If token usage isn't available in response, estimate based
+            # on response length
+            if prompt_tokens is None and completion_tokens is None:
+                # Estimate text tokens from prompt (very rough estimate)
+                text_prompt_tokens = (
+                    len(self.prompt) // 4
+                )  # ~4 chars per token
+                format_instruction_tokens = 100  # Rough estimate
+
+                # Use image token calculation from earlier
+                image_tokens = image_cost_data.get("image_tokens", 0)
+
+                # For OpenAI models with fixed image cost, we still need
+                # to estimate tokens for calculations
+                if image_tokens == 0 and self.model_name.startswith("gpt-"):
+                    # Very rough estimate: typical images might be ~1000 tokens
+                    image_tokens = 1000
+
+                # Total prompt tokens
+                prompt_tokens = (
+                    text_prompt_tokens
+                    + format_instruction_tokens
+                    + image_tokens
+                )
+
+                # Estimate completion tokens from response
+                completion_tokens = (
+                    len(response.content) // 4
+                )  # ~4 chars per token
+
+                # Total tokens
+                total_tokens = prompt_tokens + completion_tokens
+
+            # Calculate cost based on token usage and model pricing
+            pricing = self._get_cost_per_token()
+
+            # Calculate text token cost
+            text_token_cost = 0
+            if prompt_tokens is not None and completion_tokens is not None:
+                text_token_cost = (prompt_tokens * pricing["prompt"]) + (
+                    completion_tokens * pricing["completion"]
+                )
+
+            # For OpenAI, add fixed image cost
+            if pricing["image_token_method"] == "fixed":
+                total_cost = text_token_cost + image_cost_data["image_cost"]
+            else:
+                # For Anthropic, image cost is already included in
+                # the prompt tokens
+                total_cost = text_token_cost
 
             # Parse the output
-            parsed_output = self.parser.parse(msg.content)  # type: ignore
+            parsed_output = self.parser.parse(response.content)  # type: ignore
 
             # Make sure timestamp is included
             if (
@@ -242,12 +512,95 @@ class VideoQL:
             ):
                 parsed_output["timestamp"] = frame["timestamp"]
 
-            return Label(timestamp=frame["timestamp"], results=parsed_output)
+            return Label(
+                timestamp=frame["timestamp"],
+                results=parsed_output,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                cost=total_cost,
+            )
 
         except Exception as e:
             return Label(
-                timestamp=frame["timestamp"], results={}, error=str(e)
+                timestamp=frame["timestamp"],
+                results={},
+                error=str(e),
+                prompt_tokens=None,
+                completion_tokens=None,
+                total_tokens=None,
+                cost=None,
             )
+
+    def get_processing_cost(self) -> Dict[str, Any]:
+        """
+        Calculate the actual processing cost based on cached results.
+
+        Returns:
+            Dict containing token usage and cost information
+        """
+        if not self.__cache:
+            return {
+                "processed_frames": 0,
+                "api_calls": 0,
+                "total_tokens": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_cost_usd": 0,
+                "model": self.model_name,
+                "status": "No frames processed yet",
+            }
+
+        # Count frames with token information
+        frames_with_tokens = [
+            f for f in self.__cache.values() if f.total_tokens is not None
+        ]
+        total_api_calls = len(frames_with_tokens)
+
+        # Calculate total tokens and cost
+        total_prompt_tokens = sum(
+            f.prompt_tokens or 0 for f in self.__cache.values()
+        )
+        total_completion_tokens = sum(
+            f.completion_tokens or 0 for f in self.__cache.values()
+        )
+        total_tokens = sum(f.total_tokens or 0 for f in self.__cache.values())
+
+        # Calculate cost
+        pricing = self._get_cost_per_token()
+        total_cost = sum(f.cost or 0 for f in self.__cache.values())
+
+        # If cost data isn't available in the cache, calculate it
+        if total_cost == 0 and total_tokens > 0:
+            total_cost = (total_prompt_tokens * pricing["prompt"]) + (
+                total_completion_tokens * pricing["completion"]
+            )
+
+        # Count effective frames processed (accounting for stride)
+        processed_frames = sum(
+            len(
+                range(
+                    k * self.effective_stride,
+                    min((k + 1) * self.effective_stride, len(self)),
+                )
+            )
+            for k in self.__cache.keys()
+        )
+
+        return {
+            "processed_frames": processed_frames,
+            "total_frames": len(self),
+            "api_calls": total_api_calls,
+            "total_tokens": total_tokens,
+            "prompt_tokens": total_prompt_tokens,
+            "completion_tokens": total_completion_tokens,
+            "total_cost_usd": total_cost,
+            "model": self.model_name,
+            "token_pricing": pricing,
+            "completion_percentage": (
+                (processed_frames / len(self)) * 100 if len(self) > 0 else 0
+            ),
+        }
 
     def __len__(self) -> int:
         """Return the number of frames that can be processed"""
