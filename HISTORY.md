@@ -4,6 +4,15 @@ Changelog
 
 (unreleased)
 ------------
+- Video_ql/VERSION increment. [AdityaNG]
+- Fix(video_ql/models.py): default config to match requirements.
+  [AdityaNG]
+- Feat(pricing): model pricing estimation support. [AdityaNG]
+
+
+1.3.0 (2025-05-18)
+------------------
+- Release: version 1.3.0 🚀 [AdityaNG]
 - Feat(video_ql): query_proposer - video_ql/cli.py: updated to use NLP
   query proposer - README.md: docs for query_proposer -
   requirements.txt: rich added for CLI UX - tests/test_utils.py: timing
