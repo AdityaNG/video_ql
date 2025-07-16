@@ -19,10 +19,10 @@ class Query(BaseModel):
 class VideoProcessorConfig(BaseModel):
     """Configuration for video processing"""
 
-    fps: float = 1.0
+    fps: float = 0.1
     tile_frames: Tuple[int, int] = (3, 3)
     frame_stride: int = 9
-    max_resolution: Tuple[int, int] = (640, 360)
+    max_resolution: Tuple[int, int] = (480, 270)
     context: str = "Answer the following"
 
 
