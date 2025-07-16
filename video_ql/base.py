@@ -12,9 +12,10 @@ import cv2
 import numpy as np
 import yaml
 from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import JsonOutputParser
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field, create_model
 
 from .models import Label, Query, QueryConfig, VideoProcessorConfig
@@ -242,6 +243,19 @@ class VideoQL:
                 "image_token_method": "pixel_area",  # Based on pixel area
                 "image_token_ratio": 750,  # pixels per token
             },
+            # Google Gemini models (pricing as of July 2024)
+            "gemini-2.0-flash": {
+                "prompt": 1e-7,  # $0.0000001 per token ($0.1 per M)
+                "completion": 7e-7,  # $0.0000007 per token ($0.7 per M)
+                "image_token_method": "pixel_area",  # Based on pixel area
+                "image_token_ratio": 75,  # pixels per token
+            },
+            "gemini-2.0-flash-lite-001": {
+                "prompt": 7.5e-8,  # $0.000000075 per token ($0.075 per M)
+                "completion": 3e-7,  # $0.0000003 per token ($0.3 per M)
+                "image_token_method": "pixel_area",  # Based on pixel area
+                "image_token_ratio": 75,  # pixels per token
+            },
         }
 
         if self.model_name in model_pricing:
@@ -420,6 +434,11 @@ class VideoQL:
             model = ChatAnthropic(  # type: ignore
                 temperature=0.3, model=self.model_name, max_tokens=1024
             )  # type: ignore
+        elif self.model_name.startswith("gemini-"):
+            model = ChatGoogleGenerativeAI(  # type: ignore
+                temperature=0.3, model=self.model_name, max_tokens=1024, 
+                convert_system_message_to_human=True  # Gemini doesn't support system messages natively
+            )  # type: ignore
         else:
             raise ValueError(f"Unknown model name: {self.model_name}")
 
@@ -463,7 +482,7 @@ class VideoQL:
                 # Use image token calculation from earlier
                 image_tokens = image_cost_data.get("image_tokens", 0)
 
-                # For OpenAI models with fixed image cost, we still need
+                # For models with fixed image cost, we still need
                 # to estimate tokens for calculations
                 if image_tokens == 0 and self.model_name.startswith("gpt-"):
                     # Very rough estimate: typical images might be ~1000 tokens

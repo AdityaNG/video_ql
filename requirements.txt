@@ -1,6 +1,7 @@
 langchain[openai]
 langchain[anthropic]
 langchain-community
+langchain-google-genai
 opencv-python
 pydantic
 PyYAML

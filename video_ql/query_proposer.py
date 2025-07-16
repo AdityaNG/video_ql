@@ -8,8 +8,9 @@ from typing import Dict, List
 
 import yaml
 from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from .models import Label, Query, QueryConfig
 
@@ -76,8 +77,15 @@ frames according to the context.
         model = ChatOpenAI(temperature=0.7, model=model_name)  # type: ignore
     elif "claude" in model_name.lower():
         model = ChatAnthropic(temperature=0.7, model=model_name)  # type: ignore  # noqa
+    elif "gemini" in model_name.lower():
+        model = ChatGoogleGenerativeAI(  # type: ignore
+            temperature=0.7, 
+            model=model_name,
+            convert_system_message_to_human=True  # Handle system message conversion
+        )  # type: ignore
     else:
         raise ValueError(f"Unsupported model: {model_name}")
+
 
     # Format instructions to ensure proper JSON output
     format_instructions = """Return your response as a JSON array of \
@@ -156,6 +164,12 @@ def generate_query_config_from_question(
         model = ChatOpenAI(temperature=0.2, model=model_name)  # type: ignore
     elif "claude" in model_name.lower():
         model = ChatAnthropic(temperature=0.2, model=model_name)  # type: ignore  # noqa
+    elif "gemini" in model_name.lower():
+        model = ChatGoogleGenerativeAI(  # type: ignore
+            temperature=0.2, 
+            model=model_name,
+            convert_system_message_to_human=True  # Handle system message conversion
+        )  # type: ignore
     else:
         raise ValueError(f"Unsupported model: {model_name}")
 
