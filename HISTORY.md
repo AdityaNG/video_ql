@@ -4,6 +4,14 @@ Changelog
 
 (unreleased)
 ------------
+- Feat(video_ql/VERSION): increment. [AdityaNG]
+- Feat(model): moondream added. [AdityaNG]
+- Feat(models): gemini support. [AdityaNG]
+
+
+1.4.0 (2025-07-16)
+------------------
+- Release: version 1.4.0 🚀 [AdityaNG]
 - Video_ql/VERSION increment. [AdityaNG]
 - Fix(video_ql/models.py): default config to match requirements.
   [AdityaNG]
