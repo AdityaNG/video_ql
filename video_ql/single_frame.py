@@ -81,7 +81,7 @@ def parse_args():
         "--model",
         type=str,
         default="gpt-4o-mini",
-        help="Model to use for analysis (e.g., gpt-4o-mini, claude-3-haiku-20240307)",  # noqa
+        help="Model to use for analysis (e.g., gpt-4o-mini, claude-3-haiku-20240307, moondream-v1)",  # noqa
     )
     parser.add_argument(
         "--display",

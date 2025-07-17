@@ -12,12 +12,13 @@ import cv2
 import numpy as np
 import yaml
 from langchain_anthropic import ChatAnthropic
-from langchain_openai import ChatOpenAI
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage
 from langchain_core.output_parsers import JsonOutputParser
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field, create_model
 
+from .langchain_moondream import ChatMoondream
 from .models import Label, Query, QueryConfig, VideoProcessorConfig
 from .query import matches_query
 from .query_proposer import (
@@ -159,24 +160,24 @@ class VideoQL:
         for query in self.queries:
             field_name = query.query.lower().replace("?", "").replace(" ", "_")
 
+            assert isinstance(query.options, list)
+
             if query.options:
                 field_definitions[field_name] = (
                     str,
                     Field(
-                        description=f"Context: {self.context}; Query: {query.query}; Choose from: {', '.join(query.options)}"  # noqa
+                        description=f"Context: {self.context}; Query: {query.query}; Choose from: {', '.join(query.options)}",  # noqa
+                        default="/".join(query.options),
                     ),
                 )
             else:
                 field_definitions[field_name] = (
                     str,
-                    Field(description=query.query),
+                    Field(
+                        description=query.query,
+                        default="/".join(query.options),
+                    ),
                 )
-
-        # Add timestamp field
-        field_definitions["timestamp"] = (
-            float,
-            Field(description="Timestamp of the frame in seconds"),
-        )  # type: ignore
 
         # Create and return the model
         FrameAnalysis = create_model(
@@ -187,7 +188,7 @@ class VideoQL:
 
     def _create_prompt(self) -> str:
         """Create a prompt based on the queries"""
-        prompt = "Analyze this video frame and provide the following information:\n\n"  # noqa
+        prompt = ""  # noqa
 
         for query in self.queries:
             if query.options:
@@ -255,6 +256,13 @@ class VideoQL:
                 "completion": 3e-7,  # $0.0000003 per token ($0.3 per M)
                 "image_token_method": "pixel_area",  # Based on pixel area
                 "image_token_ratio": 75,  # pixels per token
+            },
+            "moondream-v1": {
+                "prompt": 0,
+                "completion": 0,
+                "image_fixed": 0.0,
+                "image_token_method": "fixed",
+                "api_call_cost": 0.0,
             },
         }
 
@@ -436,20 +444,34 @@ class VideoQL:
             )  # type: ignore
         elif self.model_name.startswith("gemini-"):
             model = ChatGoogleGenerativeAI(  # type: ignore
-                temperature=0.3, model=self.model_name, max_tokens=1024, 
-                convert_system_message_to_human=True  # Gemini doesn't support system messages natively
+                temperature=0.3,
+                model=self.model_name,
+                max_tokens=1024,
+                convert_system_message_to_human=True,  # Gemini doesn't support system messages natively  # noqa
+            )  # type: ignore
+        elif self.model_name.startswith("moondream-"):
+            model = ChatMoondream(  # type: ignore
+                api_key=os.environ.get(
+                    "MOONDREAM_API_KEY"
+                ),  # Will be None if not set, and the class will check env
+                temperature=0.3,
+                timeout=30,  # Add a reasonable timeout
             )  # type: ignore
         else:
             raise ValueError(f"Unknown model name: {self.model_name}")
 
         try:
+            # format_instructions = self.parser.get_format_instructions()
+            schema_str = self.frame_model().model_dump_json()  # type: ignore
+            format_instructions = f"Conform to this json format: {schema_str}"
+
             messages = [
                 HumanMessage(
                     content=[
                         {"type": "text", "text": self.prompt},
                         {
                             "type": "text",
-                            "text": self.parser.get_format_instructions(),
+                            "text": format_instructions,
                         },
                         {
                             "type": "image_url",
@@ -541,6 +563,9 @@ class VideoQL:
             )
 
         except Exception as e:
+            import traceback
+
+            traceback.print_exc()
             return Label(
                 timestamp=frame["timestamp"],
                 results={},

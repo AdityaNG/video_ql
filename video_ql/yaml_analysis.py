@@ -103,6 +103,7 @@ def main():  # pragma: no cover
         context=config.get("context", "Answer the following"),
         # The rest of the config options
         video_processor_config=video_processor_config,
+        model_name="moondream-v1",
     )
 
     # Parallelize the cache population

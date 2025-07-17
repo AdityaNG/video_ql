@@ -8,9 +8,9 @@ from typing import Dict, List
 
 import yaml
 from langchain_anthropic import ChatAnthropic
-from langchain_openai import ChatOpenAI
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 
 from .models import Label, Query, QueryConfig
 
@@ -79,13 +79,17 @@ frames according to the context.
         model = ChatAnthropic(temperature=0.7, model=model_name)  # type: ignore  # noqa
     elif "gemini" in model_name.lower():
         model = ChatGoogleGenerativeAI(  # type: ignore
-            temperature=0.7, 
+            temperature=0.7,
             model=model_name,
-            convert_system_message_to_human=True  # Handle system message conversion
+            convert_system_message_to_human=True,  # Handle system message conversion  # noqa
         )  # type: ignore
+    elif "moondream" in model_name.lower():
+        # For query generation, we'll use gpt-4o-mini
+        # since Moondream is primarily for image analysis
+        # You could use another text-only model here
+        model = ChatOpenAI(temperature=0.7, model="gpt-4o-mini")  # type: ignore  # noqa
     else:
         raise ValueError(f"Unsupported model: {model_name}")
-
 
     # Format instructions to ensure proper JSON output
     format_instructions = """Return your response as a JSON array of \
@@ -166,10 +170,15 @@ def generate_query_config_from_question(
         model = ChatAnthropic(temperature=0.2, model=model_name)  # type: ignore  # noqa
     elif "gemini" in model_name.lower():
         model = ChatGoogleGenerativeAI(  # type: ignore
-            temperature=0.2, 
+            temperature=0.2,
             model=model_name,
-            convert_system_message_to_human=True  # Handle system message conversion
+            convert_system_message_to_human=True,  # Handle system message conversion  # noqa
         )  # type: ignore
+    elif "moondream" in model_name.lower():
+        # For query generation, we'll use gpt-4o-mini
+        # since Moondream is primarily for image analysis
+        # You could use another text-only model here
+        model = ChatOpenAI(temperature=0.7, model="gpt-4o-mini")  # type: ignore  # noqa
     else:
         raise ValueError(f"Unsupported model: {model_name}")
 

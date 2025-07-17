@@ -34,7 +34,7 @@ def parse_args():
         "--model",
         type=str,
         default="gpt-4o-mini",
-        help="Model to use for query generation (supported: gpt-4o-mini, claude-3-haiku-20240307, gemini-2.0-flash, gemini-2.0-flash-lite-001)",
+        help="Model to use for query generation (supported: gpt-4o-mini, claude-3-haiku-20240307, gemini-2.0-flash, gemini-2.0-flash-lite-001, moondream-v1)",  # noqa
     )
     parser.add_argument(
         "--config",
