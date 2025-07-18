@@ -4,6 +4,12 @@ Changelog
 
 (unreleased)
 ------------
+- Feat(moondream): base_url from env. [AdityaNG]
+
+
+1.5.0 (2025-07-17)
+------------------
+- Release: version 1.5.0 🚀 [AdityaNG]
 - Feat(video_ql/VERSION): increment. [AdityaNG]
 - Feat(model): moondream added. [AdityaNG]
 - Feat(models): gemini support. [AdityaNG]
