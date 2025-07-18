@@ -450,10 +450,16 @@ class VideoQL:
                 convert_system_message_to_human=True,  # Gemini doesn't support system messages natively  # noqa
             )  # type: ignore
         elif self.model_name.startswith("moondream-"):
+            base_url = os.environ.get(
+                "MOONDREAM_BASE_URL",
+                "https://api.moondream.ai/v1",
+            )
+            print("MOONDREAM_BASE_URL", base_url)
             model = ChatMoondream(  # type: ignore
                 api_key=os.environ.get(
                     "MOONDREAM_API_KEY"
                 ),  # Will be None if not set, and the class will check env
+                base_url=base_url,
                 temperature=0.3,
                 timeout=30,  # Add a reasonable timeout
             )  # type: ignore
